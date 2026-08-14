@@ -1,0 +1,59 @@
+# ---------- 论文编译产物 (LaTeX) ----------
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.bbl
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.synctex.gz
+paper/*.xdv
+paper/*.nav
+paper/*.snm
+paper/*.vrb
+paper/main.pdf
+paper/figures/*.pdf !paper/figures/.gitkeep
+paper/figures/*.png !paper/figures/.gitkeep
+paper/figures/*.jpg !paper/figures/.gitkeep
+# 注:论文 PDF 不提交 git,由 make pdf 生成,打包时由 make pack 收集
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+code/.pytest_cache/
+
+# ---------- 数据 ----------
+# 原始数据由比赛官网下载,不提交;数据字典/说明(README.md)要提交
+data/*
+!data/README.md
+!data/.gitkeep
+code/data/*
+!code/data/README.md
+
+# ---------- 输出产物 ----------
+code/figures/*
+!code/figures/.gitkeep
+submission/*
+!submission/.gitkeep
+*.zip
+*.md5
+
+# ---------- 编辑器/系统 ----------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---------- 模型文件 ----------
+*.pkl
+*.h5
+*.pt
+*.onnx
+
+# Claude Code 个人配置(不提交)
+.claude/

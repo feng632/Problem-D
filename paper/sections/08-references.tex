@@ -1,0 +1,36 @@
+% =====================================================================
+%  08 参考文献
+%  用 thebibliography 手动编号(国赛最稳妥的方案,不依赖外部工具)。
+%  常用格式:
+%   [1] 作者. 题名[J]. 期刊名, 年, 卷(期): 页码.
+%   [2] 作者. 题名[M]. 出版地: 出版社, 年.
+%  在正文中用 \cite{key} 引用;凡列入参考文献的,正文中必须被引用。
+% =====================================================================
+\section{参考文献}
+
+\makeatletter
+\newenvironment{bibliographywithouttitle}[1]
+  {\list{\@biblabel{\@arabic\c@enumiv}}%
+       {\settowidth\labelwidth{\@biblabel{#1}}%
+        \leftmargin\labelwidth
+        \advance\leftmargin\labelsep
+        \@openbib@code
+        \usecounter{enumiv}%
+        \let\p@enumiv\@empty
+        \renewcommand\theenumiv{\@arabic\c@enumiv}}%
+   \sloppy
+   \clubpenalty4000
+   \@clubpenalty \clubpenalty
+   \widowpenalty4000%
+   \sfcode`\.=\@m}
+  {\def\@noitemerr
+     {\@latex@warning{Empty `bibliographywithouttitle' environment}}%
+   \endlist}
+\makeatother
+
+\begin{bibliographywithouttitle}{99}
+\bibitem{ref1}
+作者一, 作者二. 论文标题[J]. 期刊名称, 2020, 10(3): 12-34.
+\bibitem{ref2}
+作者. 教材标题[M]. 北京: 出版社, 2019.
+\end{bibliographywithouttitle}

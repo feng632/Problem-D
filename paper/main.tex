@@ -1,0 +1,58 @@
+% =====================================================================
+%  数学建模竞赛论文 — 主文件(基于国赛 cumcmthesis 官方模板 v2.8)
+%
+%  编译方式:make pdf (xelatex,编译两遍解析交叉引用)
+%  章节内容按节拆分在 sections/ 下,队员同时写不同文件避免冲突
+%  图片统一放 figures/,由 code/src/*_fig.py 生成
+% =====================================================================
+\documentclass[withoutpreface,bwprint]{cumcmthesis} % 电子版:去掉封面与编号页
+
+\usepackage[most]{tcolorbox} % 提示框(模板示例用)
+\usepackage{url}             % 网页链接
+\usepackage{subcaption}      % 子图
+
+% ---------- 论文信息(发题后填写) ----------
+\title{题目待定}                  % 论文题目
+\tihao{D}                            % 题号 A/B/C/D/E/F
+\baominghao{000000}                  % 报名号(从官网获取)
+\schoolname{学校名称}
+\membera{队员一}
+\memberb{队员二}
+\memberc{队员三}
+\supervisor{指导老师}                % 无指导老师可留空
+\yearinput{2026}
+\monthinput{08}
+\dayinput{08}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    % 摘要:一段总起 + 每问一段 + 关键词
+    问题一:……。
+    问题二:……。
+    问题三:……。
+
+    \keywords{关键词一;关键词二;关键词三}
+\end{abstract}
+
+% 目录(电子版可不打印,如需要取消注释):
+% \tableofcontents
+
+% ========== 正文各节 ==========
+\input{sections/01-problem}
+\input{sections/02-assumptions}
+\input{sections/02b-symbols}
+\input{sections/03-model-analysis}
+\input{sections/04-models}
+\input{sections/06-sensitivity}
+\input{sections/07-evaluation}
+\input{sections/08-references}
+
+\newpage
+\begin{appendices}
+    \input{sections/09-appendix}
+\end{appendices}
+
+\end{document}
