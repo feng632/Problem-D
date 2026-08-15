@@ -1,0 +1,61 @@
+# 自定义模型结构:YOLOv8-seg + P2 小目标检测头
+# 组合方式:骨干/头部沿用官方 ultralytics/cfg/models/v8/yolov8-p2.yaml 的 P2 结构,
+# 检测头替换为 yolov8-seg.yaml 的 Segment 头(nc 个类别 + 32 个 mask 系数 + 256 通道 protonet)。
+# 官方 ultralytics 8.4.120 未自带 yolov8-seg-p2.yaml,故手工拼接。
+# 参考:
+#   ultralytics/cfg/models/v8/yolov8-p2.yaml   (P2/4 - P5/32 四尺度检测头)
+#   ultralytics/cfg/models/v8/yolov8-seg.yaml  (P3/8 - P5/32 三尺度 Segment 头)
+
+nc: 3 # Dent=0, Hole=1, Rusty=2
+scales:
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.25, 512]
+
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [-1, 3, C2f, [128, True]]
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 6, C2f, [256, True]]
+  - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16
+  - [-1, 6, C2f, [512, True]]
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
+  - [-1, 3, C2f, [1024, True]]
+  - [-1, 1, SPPF, [1024, 5]] # 9
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 6], 1, Concat, [1]] # cat backbone P4
+  - [-1, 3, C2f, [512]] # 12
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 4], 1, Concat, [1]] # cat backbone P3
+  - [-1, 3, C2f, [256]] # 15 (P3/8-small)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 2], 1, Concat, [1]] # cat backbone P2
+  - [-1, 3, C2f, [128]] # 18 (P2/4-xsmall)
+
+  - [-1, 1, Conv, [128, 3, 2]]
+  - [[-1, 15], 1, Concat, [1]] # cat head P3
+  - [-1, 3, C2f, [256]] # 21 (P3/8-small)
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 12], 1, Concat, [1]] # cat head P4
+  - [-1, 3, C2f, [512]] # 24 (P4/16-medium)
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 9], 1, Concat, [1]] # cat head P5
+  - [-1, 3, C2f, [1024]] # 27 (P5/32-large)
+
+  # 注意:Segment.forward 用输入列表里的第一个元素(x[0])生成 mask proto,
+  # Proto 模块内部固定 2x 上采样。如果把 P2(stride4)放在第一位,proto 输出
+  # 分辨率会变成 imgsz/2,而 ultralytics 校验器(segment/val.py)里
+  # "imgsz = 4 * proto.shape" 和 GT mask 下采样 "imgsz // 4" 是写死的,
+  # 按 stride8->proto stride4 的默认关系假设的,对不上会导致 mask_iou 矩阵
+  # 形状不匹配(实测报错)。所以把 P3(stride8,层 21)放在第一位保证 proto
+  # 分辨率符合默认假设,P2(层 18)仍保留在检测头列表里,增加一个小目标检测尺度。
+  - [[21, 18, 24, 27], 1, Segment, [nc, 32, 256]] # Segment(proto<-P3, 检测头 P3,P2,P4,P5)
