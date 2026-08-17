@@ -11,6 +11,69 @@
 \usepackage{url}             % 网页链接
 \usepackage{subcaption}      % 子图
 
+% =====================================================================
+%  国赛格式规范(B_1.0 最终版式,覆盖 cumcmthesis 模板默认)
+%  参考:cumcm-paper-format skill
+% =====================================================================
+
+% ---------- 1. 全局:行距/段距/防溢出 ----------
+\renewcommand{\baselinestretch}{1.5}       % 1.5 倍行距
+\setlength{\parskip}{0pt}                   % 段间距归零
+\setlength{\emergencystretch}{1.5em}        % 长标题/行内公式防溢出
+
+% ---------- 2. 字体(中文真粗体借用 Fandol;英文/数字 Times New Roman) ----------
+\setmainfont{Times New Roman}[BoldFont={Times New Roman Bold}, ItalicFont={Times New Roman Italic}, BoldItalicFont={Times New Roman Bold Italic}]
+\setCJKmainfont{SimSun}[BoldFont={SimHei}, ItalicFont={KaiTi}]
+\setCJKfamilyfont{zhsong}[BoldFont={SimHei}, ItalicFont={KaiTi}]{SimSun}
+\setCJKfamilyfont{zhhei}[BoldFont={FandolHei-Bold}]{SimHei}
+\newCJKfontfamily\songbold{FandolSong-Bold}
+\def\songti{\CJKfamily{zhsong}}             % 宋体(\songti\bfseries -> SimHei)
+\def\heiti{\CJKfamily{zhhei}}               % 黑体(\heiti\bfseries -> FandolHei-Bold)
+
+% ---------- 3. 公式字体(Times 风格) ----------
+\usepackage{newtxmath}
+\DeclareSymbolFont{operators}{OT1}{qtm}{m}{n}
+\SetSymbolFont{operators}{bold}{OT1}{qtm}{bx}{n}
+
+% ---------- 4. 标题层级(黑体不加粗) ----------
+\renewcommand\thesection{\chinese{section}、}
+\renewcommand\thesubsection{\arabic{section}.\arabic{subsection}}
+\renewcommand\thesubsubsection{\thesubsection.\arabic{subsubsection}}
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}{-12pt}{12pt}{\centering\heiti\zihao{-3}}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}{-6pt}{6pt}{\heiti\zihao{4}}}
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}{-6pt}{6pt}{\heiti\zihao{-4}}}
+\makeatother
+
+% ---------- 5. 摘要与关键词 ----------
+\renewcommand\abstractname{摘\hspace{1em}要}
+\newcommand{\absstrong}[1]{{\songbold\bfseries\boldmath #1}}
+\renewcommand\keywords[1]{%
+  \par\vskip1ex
+  {\noindent\zihao{-4}{\songbold\bfseries 关键词:}~{#1}}}
+
+% ---------- 6. 图表标题(五号 10.5pt 黑体加粗居中) ----------
+\DeclareCaptionFont{strongcaption}{\heiti\bfseries}
+\DeclareCaptionFont{wuhaofont}{\zihao{5}\baselineskip=13.7pt}
+\captionsetup[figure]{font={strongcaption,wuhaofont},justification=centering}
+\captionsetup[table]{font={strongcaption,wuhaofont},justification=centering}
+
+% ---------- 7. 参考文献上标角标 ----------
+\makeatletter
+\def\@cite#1#2{\textsuperscript{[{#1\if@tempswa ,\ #2\fi}]}}
+\makeatother
+
+% ---------- 8. 表格行距紧凑(类文件默认 1.38,按格式规范改为 1.0) ----------
+% 注意:类文件已用 \mcm@oldtabular 保存原始 tabular,\let 会捕获到重定义后的版本导致自递归,
+% 故此处直接复用 \mcm@oldtabular 重建环境。
+\makeatletter
+\renewenvironment{tabular}%
+  {\bgroup%
+  \renewcommand{\arraystretch}{1.0}%
+  \mcm@oldtabular}%
+  {\mcm@endoldtabular\egroup}
+\makeatother
+
 % ---------- 论文信息(发题后填写) ----------
 \title{题目待定}                  % 论文题目
 \tihao{D}                            % 题号 A/B/C/D/E/F
@@ -47,10 +110,8 @@
 \input{sections/03-model-analysis}
 \input{sections/04-models}
 \input{sections/06-sensitivity}
-\input{sections/07-evaluation}
 \input{sections/08-references}
 
-\newpage
 \begin{appendices}
     \input{sections/09-appendix}
 \end{appendices}

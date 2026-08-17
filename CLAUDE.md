@@ -24,6 +24,6 @@
 - 回填完成后按 `FILL_CHECKLIST.md` 末尾自检节,grep 一遍占位符清零
 
 ## 团队分工(详见 COLLABORATION.md)
-- 建模手:模型设计、公式推导 → 02-assumptions、02b-symbols、03、04、06、07 文件
+- 建模手:模型设计、公式推导 → 02-assumptions、02b-symbols、03、04、06 文件
 - 编程手:数据、代码、数值结果、图表 → code/src/ + solve 脚本
 - 论文手:正文整合、摘要、排版、提交物 → main.tex、01、08、09、scripts、submission

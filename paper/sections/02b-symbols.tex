@@ -4,87 +4,109 @@
 %  建模手写公式、代码手写代码、论文手排版都用同一套符号。
 %  新符号出现时,更新此表并推送,大家在群里同步。
 %
-%  排版说明:符号较多时切分成多个表、分页连续排放。
-%  用 \clearpage 保证每表独占一页(浮动体队列清空,不产生空白页)。
+%  排版说明(国赛格式规范):单列表,每行一组「符号 含义 单位」,
+%  列宽 符号 3.2cm / 含义 10.0cm / 单位 1.3cm,
+%  \small 字号 + \tabcolsep=2.5pt;[H] 钉位,表间连排(不 \clearpage,避免大段空白)。
 %  问题二、问题三的新符号在本文件末尾按新表追加。
 % =====================================================================
-\clearpage
 \section{符号说明}
 
 % ---------- 表一:问题一(残损存在性分类) ----------
-\begin{table}[h]
+\begin{table}[H]
 \centering
+\small
+\renewcommand{\arraystretch}{1.0}
+\setlength{\tabcolsep}{2.5pt}
 \caption{主要符号说明(一):问题一残损存在性分类}
-\begin{tabular}{lll}
+\begin{tabular}{p{3.2cm}p{10.0cm}p{1.3cm}}
 \toprule
 符号 & 含义 & 单位 \\
 \midrule
-$I$            & 输入的集装箱外表面图像($640\times640$ RGB) & — \\
-$f(I)$         & 残损存在性分类函数,取值 $\{0,1\}$ & — \\
-$D(\cdot)$     & 残损检测模型(问题二建立,问题一复用) & — \\
-$\mathcal{B}$  & 检测器输出的候选框集合 & — \\
-$K$            & 候选框总数($\mathcal{B}=\{(b_i,c_i,s_i)\}_{i=1}^{K}$) & — \\
-$b_i$          & 第 $i$ 个检测框 $(x_i,y_i,w_i,h_i)$ & — \\
-$c_i$          & 第 $i$ 个检测框的类别(0 凹陷/1 破洞/2 锈蚀) & — \\
-$s_i$          & 第 $i$ 个检测框的置信度 & — \\
-$\tau$         & 判定“存在残损”的置信度阈值 & — \\
-$N(I;\tau)$    & 置信度不低于 $\tau$ 的检测框个数 & — \\
-$S(I)$         & 图像级最高检测置信度($\max_i s_i$,无框记 0) & — \\
-$Acc$,$P$,$R$,$F_1$,$AUC$ & 分类评价指标(准确率/查准率/召回率/$F_1$/$AUC$) & — \\
+$I$ & 输入的集装箱外表面图像($640\times640$ RGB) & — \\
+$f(I)$ & 残损存在性分类函数,取值 $\{0,1\}$ & — \\
+$D(\cdot)$ & 残损检测模型(问题二建立,问题一复用) & — \\
+$\mathcal{B}$ & 检测器输出的候选框集合 & — \\
+$K$ & 候选框总数($\mathcal{B}=\{(b_i,c_i,s_i)\}_{i=1}^{K}$) & — \\
+$b_i$, $c_i$, $s_i$ & 第 $i$ 个检测框的位置 $(x_i,y_i,w_i,h_i)$、类别(0 凹陷/1 破洞/2 锈蚀)与置信度 & — \\
+$\tau$ & 判定“存在残损”的置信度阈值 & — \\
+$N(I;\tau)$ & 置信度不低于 $\tau$ 的检测框个数 & — \\
+$S(I)$ & 图像级最高检测置信度($\max_i s_i$,无框记 0) & — \\
+$Acc$, $P$, $R$ & 分类准确率、查准率、召回率 & — \\
+$F_1$, $AUC$ & $F_1$ 值、ROC 曲线下面积 & — \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\clearpage
-
-% ---------- 表二:问题二(残损检测与分割) ----------
-\begin{table}[h]
+% ---------- 表二:问题二(检测与分割指标) ----------
+\begin{table}[H]
 \centering
-\caption{主要符号说明(二):问题二残损检测与分割}
-\begin{tabular}{lll}
+\small
+\renewcommand{\arraystretch}{1.0}
+\setlength{\tabcolsep}{2.5pt}
+\caption{主要符号说明(二):问题二检测与分割指标}
+\begin{tabular}{p{3.2cm}p{10.0cm}p{1.3cm}}
 \toprule
 符号 & 含义 & 单位 \\
 \midrule
-$B^{gt}$       & 真实(ground-truth)边界框 & — \\
+$B^{gt}$ & 真实(ground-truth)边界框 & — \\
 $\mathrm{IoU}$ & 交并比 & — \\
-$P$,$R$,$AP$,$mAP$ & 检测评价指标(查准率/召回率/平均精度/均值平均精度) & — \\
-$mAP@0.5$,$mAP@0.5:0.95$ & 不同 IoU 阈值下的 mAP & — \\
-$\hat{M}_c$,$M_c$ & 预测掩码与真实掩码(类别 $c$) & — \\
-$\hat{m}_i$,$m_i$ & 掩码像素预测值与真值 & — \\
+$P$, $R$ & 查准率、召回率 & — \\
+$AP$ & 平均精度(PR 曲线下面积) & — \\
+$mAP$ & 均值平均精度 & — \\
+$mAP@0.5$ & 交并比阈值 0.5 下的均值平均精度 & — \\
+$mAP@0.5:0.95$ & 交并比阈值从 0.5 到 0.95 平均的均值平均精度 & — \\
+$\hat{M}_c$, $M_c$ & 预测掩码与真实掩码(类别 $c$) & — \\
+$\hat{m}_i$, $m_i$ & 掩码像素预测值与真值 & — \\
 $\mathrm{Dice}$ & Dice 系数(分割) & — \\
 $\mathrm{mIoU}$ & 平均交并比(分割) & — \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------- 表三:问题二(网络损失与后处理) ----------
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.0}
+\setlength{\tabcolsep}{2.5pt}
+\caption{主要符号说明(三):问题二网络损失与后处理}
+\begin{tabular}{p{3.2cm}p{10.0cm}p{1.3cm}}
+\toprule
+符号 & 含义 & 单位 \\
+\midrule
 $\mathcal{L}_{cls}$ & 分类损失 & — \\
 $\mathcal{L}_{box}$ & 边框回归损失 & — \\
 $\mathcal{L}_{seg}$ & 分割损失 & — \\
-$\mathcal{L}$   & 总损失 & — \\
+$\mathcal{L}$ & 总损失 & — \\
 $\lambda_{cls}$,$\lambda_{box}$,$\lambda_{seg}$ & 各损失项权重 & — \\
-$\tau_{nms}$    & 非极大值抑制(NMS)的 IoU 阈值 & — \\
-$sev(b_i)$    & 检测框严重度代理($=w_i\,h_i$,面积越大越严重) & — \\
-$P_2$,$P_3$,$P_4$,$P_5$ & 特征金字塔不同尺度的特征层($P_2$ 为小目标增强层) & — \\
+$\tau_{nms}$ & 非极大值抑制(NMS)的 IoU 阈值 & — \\
+$sev(b_i)$ & 检测框严重度代理($=w_i\,h_i$,面积越大越严重) & — \\
+$P_2$, $P_3$, $P_4$, $P_5$ & 特征金字塔不同尺度的特征层($P_2$ 为小目标增强层) & — \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\clearpage
-
-% ---------- 表三:问题三(模型评估) ----------
-\begin{table}[h]
+% ---------- 表四:问题三(模型评估) ----------
+\begin{table}[H]
 \centering
-\caption{主要符号说明(三):问题三模型评估}
-\begin{tabular}{lll}
+\small
+\renewcommand{\arraystretch}{1.0}
+\setlength{\tabcolsep}{2.5pt}
+\caption{主要符号说明(四):问题三模型评估}
+\begin{tabular}{p{3.2cm}p{10.0cm}p{1.3cm}}
 \toprule
 符号 & 含义 & 单位 \\
 \midrule
-$TPR$,$FPR$     & 真阳率、假阳率 & — \\
-$AP_s$,$AP_m$,$AP_l$ & 小、中、大目标平均精度 & — \\
-$y_j^{clean}$,$y_j^{pert}$ & 干净/扰动条件下第 $j$ 项指标取值 & — \\
-$\Delta_j$      & 第 $j$ 项指标的性能衰减率 & \% \\
-$t_{inf}$       & 单张图像平均推理耗时 & s \\
-$FPS$           & 推理帧率 & 帧/s \\
-$A^k$           & 第 $k$ 个特征图 & — \\
-$y^c$           & 类别 $c$ 的预测得分 & — \\
-$\alpha_k^c$    & 第 $k$ 个特征图对类别 $c$ 的权重 & — \\
-$G^c$           & 类别 $c$ 的 Grad-CAM 激活图 & — \\
+$TPR$, $FPR$ & 真阳率、假阳率 & — \\
+$AP_s$, $AP_m$, $AP_l$ & 小、中、大目标平均精度 & — \\
+$y_j^{clean}$, $y_j^{pert}$ & 干净/扰动条件下第 $j$ 项指标取值 & — \\
+$\Delta_j$ & 第 $j$ 项指标的性能衰减率 & \% \\
+$t_{inf}$ & 单张图像平均推理耗时 & s \\
+$FPS$ & 推理帧率 & 帧/s \\
+$A^k$ & 第 $k$ 个特征图 & — \\
+$y^c$ & 类别 $c$ 的预测得分 & — \\
+$\alpha_k^c$ & 第 $k$ 个特征图对类别 $c$ 的权重 & — \\
+$G^c$ & 类别 $c$ 的 Grad-CAM 激活图 & — \\
 \bottomrule
 \end{tabular}
 \end{table}
