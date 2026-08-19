@@ -57,6 +57,9 @@ import torchvision
 SEED = 42
 IMG_SIZE = 1280
 BATCH = 4  # 8GB 显存 + 1280 分辨率 + P2 头 + seg,保守取值
+WORKERS = 4  # dataloader 进程数;默认 8 时 train+val 两个 dataloader 各开 8 个子
+             # 进程,实测每个子进程 ~800MB RSS,合计能吃掉 12GB+ 主存,压到 4
+             # 给主机内存留够余量
 EPOCHS = 100  # 完整训练轮数
 SMOKE_EPOCHS = 2  # 冒烟测试轮数
 PATIENCE = 20  # 早停 patience(基于训练期验证集)
@@ -223,8 +226,24 @@ def nms_and_topk(boxes_xyxy, scores, classes, masks=None, iou_thres=0.5, topk=4,
 # ==========================================================================
 # 3. 训练
 # ==========================================================================
-def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH):
+def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH, resume: bool = False):
     from ultralytics import YOLO
+
+    run_dir = RUNS_DIR / run_name
+    last_pt = run_dir / "weights" / "last.pt"
+
+    if resume:
+        if not last_pt.exists():
+            raise FileNotFoundError(f"--resume 但找不到断点权重: {last_pt}")
+        # ultralytics 的 resume 语义:读 last.pt 旁边保存的 args.yaml 原样续训
+        # (总 epoch 数以当初训练时传的为准),这里只需要传 resume=True,
+        # 其余训练超参会被 args.yaml 覆盖,传了也不生效,不重复列出。
+        model = YOLO(str(last_pt))
+        t0 = time.time()
+        model.train(resume=True)
+        elapsed = time.time() - t0
+        best_pt = run_dir / "weights" / "best.pt"
+        return model, run_dir, best_pt, elapsed
 
     model = YOLO(str(MODEL_CFG))
     model.load(BASE_WEIGHTS)  # 迁移同形状层权重;P2 新增层保持随机初始化
@@ -235,6 +254,7 @@ def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH)
         epochs=epochs,
         imgsz=IMG_SIZE,
         batch=batch,
+        workers=WORKERS,
         seed=SEED,
         deterministic=True,
         patience=PATIENCE,
@@ -260,7 +280,6 @@ def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH)
         hsv_v=0.4,
     )
     elapsed = time.time() - t0
-    run_dir = RUNS_DIR / run_name
     best_pt = run_dir / "weights" / "best.pt"
     return model, run_dir, best_pt, elapsed
 
@@ -350,18 +369,15 @@ def _compute_ap_for_class(preds, gts, iou_thres, area_range=None):
     return ap, recall, precision
 
 
+EVAL_CHUNK = 16  # model.predict() 在 retina_masks=True 时,同一次调用内显存会随
+                  # 已处理张数线性累积不释放(实测约 0.4GB/张,像内部 Results 缓存
+                  # 没有真正随 stream=True 逐批释放),413 张一次性喂进去在 8GB 卡上
+                  # 20 张左右就爆。分块多次调用 predict(),块间显式清缓存重置。
+
+
 def evaluate_official(model, test_stems, class_names=CLASS_NAMES):
     """在官方 413(或冒烟子集)验证集上跑一次推理并计算全部指标。"""
     img_paths = [str((SEG_DATASET / "images" / "test" / f"{s}.jpg").resolve()) for s in test_stems]
-    results = model.predict(
-        source=img_paths,
-        imgsz=IMG_SIZE,
-        conf=CONF_EVAL,
-        iou=IOU_NMS_EVAL,
-        verbose=False,
-        retina_masks=True,
-        save=False,
-    )
 
     # ---- 汇总预测 / 真值 ----
     preds_by_cls = {c: [] for c in range(NUM_CLASSES)}  # (img_id, score, box, area)
@@ -371,84 +387,108 @@ def evaluate_official(model, test_stems, class_names=CLASS_NAMES):
 
     viz_samples = []  # 存 4 个随机样例的原始预测,供 fig_q2_visual.py
 
+    dice_raw = {c: [] for c in range(NUM_CLASSES)}  # (dice, iou) 逐 GT 实例,跨 chunk 累积
+
     rng = random.Random(SEED)
     viz_pick = set(rng.sample(range(len(test_stems)), k=min(4, len(test_stems))))
 
-    for img_id, (stem, res) in enumerate(zip(test_stems, results)):
-        h, w = res.orig_shape
-        # ground truth (原始 bbox 格式,直接读取,避免多边形反算误差)
-        gt_txt = SRC_DATASET / "labels" / "test" / f"{stem}.txt"
-        gt_list = []
-        if gt_txt.exists() and gt_txt.read_text().strip():
-            for line in gt_txt.read_text().strip().splitlines():
-                c, xc, yc, bw, bh = line.split()
-                c = int(c)
-                xc, yc, bw, bh = map(float, (xc, yc, bw, bh))
-                x1, y1, x2, y2 = (xc - bw / 2) * w, (yc - bh / 2) * h, (xc + bw / 2) * w, (yc + bh / 2) * h
-                area = max(x2 - x1, 0) * max(y2 - y1, 0)
-                gt_list.append({"cls": c, "box": [x1, y1, x2, y2], "area": area})
-                gts_by_cls[c].setdefault(img_id, []).append({"box": [x1, y1, x2, y2], "area": area, "used": False})
+    import torch
 
-        # predictions
-        n_pred = 0 if res.boxes is None else len(res.boxes)
-        pred_entries = []  # for this image: (cls, score, box, mask)
-        if n_pred > 0:
-            xyxy = res.boxes.xyxy.cpu().numpy()
-            confs = res.boxes.conf.cpu().numpy()
-            clss = res.boxes.cls.cpu().numpy().astype(int)
-            if res.masks is not None:
-                mdata = res.masks.data.cpu().numpy().astype(bool)  # (n,H,W) already retina (orig size)
-            else:
-                mdata = None
-            for k in range(n_pred):
-                box = xyxy[k].tolist()
-                area = max(box[2] - box[0], 0) * max(box[3] - box[1], 0)
-                c = int(clss[k])
-                sc = float(confs[k])
-                preds_by_cls[c].append((img_id, sc, box, area))
-                mask = mdata[k] if mdata is not None else None
-                pred_entries.append({"cls": c, "score": sc, "box": box, "mask": mask})
+    for chunk_start in range(0, len(img_paths), EVAL_CHUNK):
+        chunk_paths = img_paths[chunk_start:chunk_start + EVAL_CHUNK]
+        chunk_stems = test_stems[chunk_start:chunk_start + EVAL_CHUNK]
+        chunk_results = model.predict(
+            source=chunk_paths,
+            imgsz=IMG_SIZE,
+            batch=BATCH,
+            workers=WORKERS,
+            conf=CONF_EVAL,
+            iou=IOU_NMS_EVAL,
+            verbose=False,
+            retina_masks=True,
+            save=False,
+        )
+        for local_id, (stem, res) in enumerate(zip(chunk_stems, chunk_results)):
+            img_id = chunk_start + local_id
+            h, w = res.orig_shape
+            # ground truth (原始 bbox 格式,直接读取,避免多边形反算误差)
+            gt_txt = SRC_DATASET / "labels" / "test" / f"{stem}.txt"
+            gt_list = []
+            if gt_txt.exists() and gt_txt.read_text().strip():
+                for line in gt_txt.read_text().strip().splitlines():
+                    c, xc, yc, bw, bh = line.split()
+                    c = int(c)
+                    xc, yc, bw, bh = map(float, (xc, yc, bw, bh))
+                    x1, y1, x2, y2 = (xc - bw / 2) * w, (yc - bh / 2) * h, (xc + bw / 2) * w, (yc + bh / 2) * h
+                    area = max(x2 - x1, 0) * max(y2 - y1, 0)
+                    gt_list.append({"cls": c, "box": [x1, y1, x2, y2], "area": area})
+                    gts_by_cls[c].setdefault(img_id, []).append({"box": [x1, y1, x2, y2], "area": area, "used": False})
 
-        if img_id in viz_pick:
-            viz_samples.append(
-                {
-                    "stem": stem,
-                    "img_path": img_paths[img_id],
-                    "orig_shape": (h, w),
-                    "gt": gt_list,
-                    "pred": [
-                        {"cls": p["cls"], "score": p["score"], "box": p["box"]}
-                        for p in pred_entries
-                    ],
-                    "pred_masks": [p["mask"] for p in pred_entries] if pred_entries else [],
-                }
-            )
+            # predictions
+            n_pred = 0 if res.boxes is None else len(res.boxes)
+            pred_entries = []  # for this image: (cls, score, box, mask)
+            if n_pred > 0:
+                xyxy = res.boxes.xyxy.cpu().numpy()
+                confs = res.boxes.conf.cpu().numpy()
+                clss = res.boxes.cls.cpu().numpy().astype(int)
+                if res.masks is not None:
+                    mdata = res.masks.data.cpu().numpy().astype(bool)  # (n,H,W) already retina (orig size)
+                else:
+                    mdata = None
+                for k in range(n_pred):
+                    box = xyxy[k].tolist()
+                    area = max(box[2] - box[0], 0) * max(box[3] - box[1], 0)
+                    c = int(clss[k])
+                    sc = float(confs[k])
+                    preds_by_cls[c].append((img_id, sc, box, area))
+                    mask = mdata[k] if mdata is not None else None
+                    pred_entries.append({"cls": c, "score": sc, "box": box, "mask": mask})
 
-        # ---- 混淆矩阵(IoU>=0.5 贪心匹配,3 类 + 背景)----
-        gt_boxes_img = [g["box"] for g in gt_list]
-        gt_cls_img = [g["cls"] for g in gt_list]
-        pred_sorted_idx = sorted(range(len(pred_entries)), key=lambda i: -pred_entries[i]["score"])
-        gt_used = [False] * len(gt_list)
-        for pi in pred_sorted_idx:
-            pbox = pred_entries[pi]["box"]
-            pcls = pred_entries[pi]["cls"]
-            if gt_boxes_img:
-                ious = _box_iou_matrix([pbox], gt_boxes_img)[0]
-            else:
-                ious = np.array([])
-            best_j = -1
-            best_iou = 0.5
-            for j, iou in enumerate(ious):
-                if not gt_used[j] and iou >= best_iou:
-                    best_iou, best_j = iou, j
-            if best_j >= 0:
-                gt_used[best_j] = True
-                confusion[gt_cls_img[best_j], pcls] += 1
-            else:
-                confusion[NUM_CLASSES, pcls] += 1  # 误检(背景 -> 类别)
-        for j, used in enumerate(gt_used):
-            if not used:
-                confusion[gt_cls_img[j], NUM_CLASSES] += 1  # 漏检(类别 -> 背景)
+            if img_id in viz_pick:
+                viz_samples.append(
+                    {
+                        "stem": stem,
+                        "img_path": img_paths[img_id],
+                        "orig_shape": (h, w),
+                        "gt": gt_list,
+                        "pred": [
+                            {"cls": p["cls"], "score": p["score"], "box": p["box"]}
+                            for p in pred_entries
+                        ],
+                        "pred_masks": [p["mask"] for p in pred_entries] if pred_entries else [],
+                    }
+                )
+
+            # ---- 混淆矩阵(IoU>=0.5 贪心匹配,3 类 + 背景)----
+            gt_boxes_img = [g["box"] for g in gt_list]
+            gt_cls_img = [g["cls"] for g in gt_list]
+            pred_sorted_idx = sorted(range(len(pred_entries)), key=lambda i: -pred_entries[i]["score"])
+            gt_used = [False] * len(gt_list)
+            for pi in pred_sorted_idx:
+                pbox = pred_entries[pi]["box"]
+                pcls = pred_entries[pi]["cls"]
+                if gt_boxes_img:
+                    ious = _box_iou_matrix([pbox], gt_boxes_img)[0]
+                else:
+                    ious = np.array([])
+                best_j = -1
+                best_iou = 0.5
+                for j, iou in enumerate(ious):
+                    if not gt_used[j] and iou >= best_iou:
+                        best_iou, best_j = iou, j
+                if best_j >= 0:
+                    gt_used[best_j] = True
+                    confusion[gt_cls_img[best_j], pcls] += 1
+                else:
+                    confusion[NUM_CLASSES, pcls] += 1  # 误检(背景 -> 类别)
+            for j, used in enumerate(gt_used):
+                if not used:
+                    confusion[gt_cls_img[j], NUM_CLASSES] += 1  # 漏检(类别 -> 背景)
+
+        _accumulate_dice_miou(chunk_results, chunk_stems, dice_raw)
+
+        del chunk_results
+        torch.cuda.empty_cache()
 
     # ---- AP@0.5 / AP@0.5:0.95 / AP_s,m,l (逐类) ----
     iou_range = np.arange(0.5, 1.0, 0.05)
@@ -473,8 +513,16 @@ def evaluate_official(model, test_stems, class_names=CLASS_NAMES):
         }
         pr_curves[c] = {"recall": rec50.round(4).tolist(), "precision": prec50.round(4).tolist()}
 
-    # ---- Dice / mIoU (逐类,GT 实例级平均,贪心按分数匹配) ----
-    dice_iou = _compute_dice_miou(results, test_stems, class_names)
+    # ---- Dice / mIoU (逐类,GT 实例级平均,贪心按分数匹配;已在分块循环中累积) ----
+    dice_iou = {}
+    for c in range(NUM_CLASSES):
+        vals = dice_raw[c]
+        if vals:
+            dice_mean = float(np.mean([v[0] for v in vals]))
+            iou_mean = float(np.mean([v[1] for v in vals]))
+        else:
+            dice_mean, iou_mean = 0.0, 0.0
+        dice_iou[c] = {"dice": round(dice_mean, 4), "iou": round(iou_mean, 4)}
 
     metrics_table = []
     for c in range(NUM_CLASSES):
@@ -494,10 +542,10 @@ def evaluate_official(model, test_stems, class_names=CLASS_NAMES):
     }
 
 
-def _compute_dice_miou(results, test_stems, class_names, iou_match_min=0.1):
-    """GT 实例级平均 Dice / IoU(矩形伪掩码 vs 预测掩码);未命中的 GT 记 0。"""
-    per_class = {c: [] for c in range(NUM_CLASSES)}
-    for img_id, (stem, res) in enumerate(zip(test_stems, results)):
+def _accumulate_dice_miou(results, stems, per_class, iou_match_min=0.1):
+    """GT 实例级 Dice / IoU(矩形伪掩码 vs 预测掩码)累加进 per_class;未命中的 GT 记 0。
+    按 chunk 调用,把 (dice, iou) 追加进调用方持有的 per_class 累积字典,不在此处求均值。"""
+    for stem, res in zip(stems, results):
         h, w = res.orig_shape
         gt_txt = SRC_DATASET / "labels" / "test" / f"{stem}.txt"
         gts = []
@@ -541,17 +589,6 @@ def _compute_dice_miou(results, test_stems, class_names, iou_match_min=0.1):
             else:
                 per_class[g["cls"]].append((0.0, 0.0))
 
-    out = {}
-    for c in range(NUM_CLASSES):
-        vals = per_class[c]
-        if vals:
-            dice_mean = float(np.mean([v[0] for v in vals]))
-            iou_mean = float(np.mean([v[1] for v in vals]))
-        else:
-            dice_mean, iou_mean = 0.0, 0.0
-        out[c] = {"dice": round(dice_mean, 4), "iou": round(iou_mean, 4)}
-    return out
-
 
 # ==========================================================================
 # 5. 训练损失曲线数据(从 ultralytics results.csv 读取)
@@ -577,6 +614,7 @@ def main():
     parser.add_argument("--smoke", action="store_true", help="冒烟测试:小数据子集 + 少量 epoch,验证全流程可跑通")
     parser.add_argument("--epochs", type=int, default=None, help="覆盖默认 epoch 数")
     parser.add_argument("--batch", type=int, default=BATCH)
+    parser.add_argument("--resume", action="store_true", help="从 runs_q2/<run_name>/weights/last.pt 断点续训")
     args = parser.parse_args()
 
     epochs = args.epochs if args.epochs is not None else (SMOKE_EPOCHS if args.smoke else EPOCHS)
@@ -595,13 +633,21 @@ def main():
         n = cls_count_train.get(c, 0)
         print(f"    {CLASS_NAMES[c]:>6s}(id={c}): {n:5d}  ({100*n/total:.2f}%)")
 
-    model, run_dir, best_pt, elapsed = train_model(data_yaml, epochs, run_name, batch=args.batch)
+    model, run_dir, best_pt, elapsed = train_model(data_yaml, epochs, run_name, batch=args.batch, resume=args.resume)
     print(f"[solve_q2] 训练完成,用时 {elapsed/60:.2f} 分钟,runs 目录 -> {run_dir}")
     print(f"[solve_q2] best.pt -> {best_pt}")
 
+    import gc
+    import torch
     from ultralytics import YOLO
 
-    eval_model = YOLO(str(best_pt)) if best_pt.exists() else model
+    # trainer 的 model/optimizer 不会自动从显存释放,8GB 卡上不清掉的话
+    # evaluate_official() 里的 predict() 一进来就没有空余显存可用。
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    eval_model = YOLO(str(best_pt)) if best_pt.exists() else YOLO(str(run_dir / "weights" / "last.pt"))
 
     print(f"[solve_q2] 在官方验证集上评估(N={len(test_stems)}),仅本次使用,不参与训练期选模型 ...")
     eval_out = evaluate_official(eval_model, test_stems)
