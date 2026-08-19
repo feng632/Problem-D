@@ -226,7 +226,40 @@ def nms_and_topk(boxes_xyxy, scores, classes, masks=None, iou_thres=0.5, topk=4,
 # ==========================================================================
 # 3. 训练
 # ==========================================================================
-def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH, resume: bool = False):
+# 消融实验用:强/弱两组增强超参,只有 mixup/copy_paste/degrees/shear 这四项
+# 有差异(其余项两边取值相同,即 ultralytics 默认值),这样"+强增强"这一步的
+# mAP 变化才能干净地归因到这四项,不掺杂其它增强参数的影响。
+_AUG_WEAK = dict(
+    mosaic=1.0, mixup=0.0, copy_paste=0.0, degrees=0.0,
+    translate=0.10, scale=0.50, shear=0.0, fliplr=0.5,
+    hsv_h=0.015, hsv_s=0.7, hsv_v=0.4,
+)
+_AUG_STRONG = dict(
+    mosaic=1.0, mixup=0.10, copy_paste=0.10, degrees=5.0,
+    translate=0.10, scale=0.50, shear=2.0, fliplr=0.5,
+    hsv_h=0.015, hsv_s=0.7, hsv_v=0.4,
+)
+
+# 消融实验用:不带 P2 头的标准 yolov8s-seg 结构(ultralytics 内置名,不用
+# 落地本地 yaml)。
+BASE_MODEL_CFG = "yolov8s-seg.yaml"
+
+
+def train_model(
+    data_yaml: Path,
+    epochs: int,
+    run_name: str,
+    batch: int = BATCH,
+    resume: bool = False,
+    use_p2: bool = True,
+    cls_pw: float = 1.0,
+    strong_aug: bool = True,
+):
+    """use_p2/cls_pw/strong_aug 三个开关只服务于 Q3 消融实验(逐项累加:
+    类别加权/P2头/1280输入/强增强);正式训练走全部默认值,行为与消融加
+    这三个参数前完全一致。1280 输入的开关走的是模块级 IMG_SIZE(跟
+    explore_q3_s_res.py 的猴子补丁用法一致),这里不重复加参数。
+    """
     from ultralytics import YOLO
 
     run_dir = RUNS_DIR / run_name
@@ -245,8 +278,11 @@ def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH,
         best_pt = run_dir / "weights" / "best.pt"
         return model, run_dir, best_pt, elapsed
 
-    model = YOLO(str(MODEL_CFG))
-    model.load(BASE_WEIGHTS)  # 迁移同形状层权重;P2 新增层保持随机初始化
+    model_cfg = MODEL_CFG if use_p2 else BASE_MODEL_CFG
+    model = YOLO(str(model_cfg))
+    model.load(BASE_WEIGHTS)  # 迁移同形状层权重;P2 新增层(若有)保持随机初始化
+
+    aug_kw = _AUG_STRONG if strong_aug else _AUG_WEAK
 
     t0 = time.time()
     model.train(
@@ -258,7 +294,7 @@ def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH,
         seed=SEED,
         deterministic=True,
         patience=PATIENCE,
-        cls_pw=1.0,  # 逆类别频率加权(class-weighted loss)
+        cls_pw=cls_pw,  # 逆类别频率加权(class-weighted loss),1.0=开/0.0=关
         # mask proto 仍从 P3(stride 8)生成(见 yolov8s-seg-p2.yaml 里的排序说明),
         # 与默认 yolov8-seg 结构一致,mask_ratio 保持默认值 4 即可。
         project=str(RUNS_DIR),
@@ -266,18 +302,7 @@ def train_model(data_yaml: Path, epochs: int, run_name: str, batch: int = BATCH,
         exist_ok=True,
         plots=True,
         val=True,
-        # 强数据增强
-        mosaic=1.0,
-        mixup=0.10,
-        copy_paste=0.10,
-        degrees=5.0,
-        translate=0.10,
-        scale=0.50,
-        shear=2.0,
-        fliplr=0.5,
-        hsv_h=0.015,
-        hsv_s=0.7,
-        hsv_v=0.4,
+        **aug_kw,
     )
     elapsed = time.time() - t0
     best_pt = run_dir / "weights" / "best.pt"
