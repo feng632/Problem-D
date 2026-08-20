@@ -36,8 +36,9 @@ DATA   := $(P)/data
 SUBM   := $(P)/submission
 
 # ---------- tools ----------
-# Windows 下 python 命令可能是商店占位符(WindowsApps),用 py -3 启动真实解释器
-PY           = py -3
+# 项目依赖(torch/ultralytics/cv2/joblib/sklearn 等)装在仓库根目录的 .venv 里,
+# 用它的解释器而不是系统 python/py(系统环境没装这些包,py -3 会报 ModuleNotFoundError)
+PY           = $(P)/.venv/Scripts/python.exe
 PDF2PNG      = gs -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -sOutputFile=$@ $<
 
 # ---------- LaTeX intermediate artifacts (removed by clean) ----------
@@ -67,7 +68,7 @@ help:
 # ---------- figures: run every *_fig.py, then sync to paper ----------
 # 脚本列表写死(Windows 版 make 的 glob/wildcard 在 GBK 编码下有兼容问题,
 # 动态枚举不可靠)。新增画图脚本时在下面加一行即可。
-FIG_SCRIPTS := fig_example.py
+FIG_SCRIPTS := fig_data_dist.py fig_data_scale.py fig_q1_metrics.py fig_q2_loss.py fig_q2_pr.py fig_q2_confusion.py fig_q2_visual.py fig_q3_robust.py fig_q3_sens.py fig_q3_gradcam.py fig_q3_ablation.py
 
 fig:
 	@cd $(CODE) && for f in $(FIG_SCRIPTS); do echo "  running $$f"; $(PY) src/$$f || exit 1; done
