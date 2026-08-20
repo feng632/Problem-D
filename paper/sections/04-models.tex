@@ -258,11 +258,11 @@ G^c=\mathrm{ReLU}\Bigl(\sum_k \alpha_k^c A^k\Bigr).
 
 \subsubsection{对比实验}
 
-设计两组对比:(1) 问题一方案对比——检测归约方案与自建小 CNN 分类器、传统特征 + SVM 基线对比。为隔离训练与评估,自建分类器以训练正样本 + 调参半合成负样本训练,三方案统一在问题一的评估集(413 张验证正样本 + 评估半合成负样本)上评估,训练/调参数据与评估数据不重叠,保证比较公平;(2) 问题二模型对比——不同骨干规模(YOLOv8n/s/m-seg)的精度—效率权衡,必要时与 Faster R-CNN 对比。
+设计两组对比:(1) 问题一方案对比——检测归约方案与自建小 CNN 分类器、传统特征 + SVM 基线对比。为隔离训练与评估,自建分类器以训练正样本 + 调参半合成负样本训练,三方案统一在问题一的评估集(413 张验证正样本 + 评估半合成负样本)上评估,训练/调参数据与评估数据不重叠,保证比较公平。合成负样本由 4 块 clean cell 拼接而成,接缝等结构痕迹可能构成可被分类器利用的捷径信号;为排除其对结论的影响,另收集 43 张真实无残损集装箱照片(不拼接)作方向性诊断——三方案不重新训练、沿用各自选定的阈值,在真实负样本口径下复评 $AUC$,检验合成口径结论的稳健性。由于真实负样本取景尺度与训练分布不完全一致、样本量偏小,该口径仅作方向性诊断,不作正式基准;(2) 问题二模型对比——不同骨干规模(YOLOv8n/s/m-seg)的精度—效率权衡。
 
 \subsubsection{消融实验}
 
-对问题二模型的关键设计作\textbf{逐项累加式消融}:自基准配置(无类别加权/无 $P_2$/$640$ 输入/无强增强)起依次加入类别加权损失、$P_2$ 小目标检测头、高分辨率输入($1280$)、强数据增强,逐行考察各模块对 $mAP$ 与 $AP_s$ 的贡献。
+对问题二模型的关键设计作\textbf{逐项累加式消融}:自基准配置(无类别加权/无 $P_2$/$640$ 输入/无强增强)起依次加入类别加权损失、$P_2$ 小目标检测头、高分辨率输入($1280$)、强数据增强,逐行考察各模块对 $mAP$ 与 $AP_s$ 的贡献。为控制训练成本,消融各配置统一训练 30 epoch,仅用于比较模块间的相对增量;最终模型的绝对指标见问题二结果(100 epoch 训练),两者口径不同,不可直接对比。
 
 \subsubsection{灵敏度分析}
 
@@ -274,7 +274,7 @@ G^c=\mathrm{ReLU}\Bigl(\sum_k \alpha_k^c A^k\Bigr).
 
 \subsubsection{求解结果}
 
-(待编程手回填数值与图。)鲁棒性衰减见表~\ref{tab:q3-robust}、图~\ref{fig:q3-robust};对比实验结果见表~\ref{tab:q3-compare};效率对比见表~\ref{tab:q3-eff};消融结果见表~\ref{tab:q3-ablation};top-4 排序方式对比见表~\ref{tab:q3-top4};超参灵敏度曲线见图~\ref{fig:q3-sens};Grad-CAM 可视化见图~\ref{fig:q3-gradcam}。结果表明\textbf{(待回填:一句结论)}。
+(待编程手回填数值与图。)鲁棒性衰减见表~\ref{tab:q3-robust}、图~\ref{fig:q3-robust};对比实验结果见表~\ref{tab:q3-compare}(问题一方案以合成/真实负样本双口径 $AUC$ 报告);效率对比见表~\ref{tab:q3-eff};消融结果见表~\ref{tab:q3-ablation}(各配置 30 epoch,仅比较相对增量);top-4 排序方式对比见表~\ref{tab:q3-top4};超参灵敏度曲线见图~\ref{fig:q3-sens};Grad-CAM 可视化见图~\ref{fig:q3-gradcam}。结果表明\textbf{(待回填:一句结论)}。
 
 % 待新增表 tab:q3-robust(取消注释,数值逐个替换 0.xxxx / x.xx):
 % \begin{table}[h]
@@ -295,18 +295,18 @@ G^c=\mathrm{ReLU}\Bigl(\sum_k \alpha_k^c A^k\Bigr).
 % \end{tabular}
 % \end{table}
 %
-% 待新增表 tab:q3-compare(取消注释,数值逐个替换 0.xxxx):
+% 待新增表 tab:q3-compare(取消注释,数值逐个替换 0.xxxx;问题一以双口径 AUC 报告,数值见 code/src/noted.md 第 4.3 节):
 % \begin{table}[h]
 % \centering
-% \caption{对比实验结果(验证集)}
+% \caption{对比实验结果(验证集;问题一为合成/真实负样本双口径 $AUC$)}
 % \label{tab:q3-compare}
 % \begin{tabular}{lccc}
 % \toprule
-% 方案 & Acc & $F_1$ & mAP@0.5 \\
+% 方案 & $AUC$(合成负样本) & $AUC$(真实负样本, $N=43$) & mAP@0.5 \\
 % \midrule
 % 问题一:传统特征+SVM(合成负样本训练) & 0.xxxx & 0.xxxx & — \\
 % 问题一:自建小 CNN(合成负样本训练)   & 0.xxxx & 0.xxxx & — \\
-% 问题一:检测归约(本文)           & 0.xxxx & 0.xxxx & — \\
+% 问题一:检测归约(本文)               & 0.xxxx & 0.xxxx & — \\
 % \midrule
 % 问题二:YOLOv8n-seg & — & — & 0.xxxx \\
 % 问题二:YOLOv8s-seg(本文) & — & — & 0.xxxx \\
@@ -331,10 +331,10 @@ G^c=\mathrm{ReLU}\Bigl(\sum_k \alpha_k^c A^k\Bigr).
 % \end{tabular}
 % \end{table}
 %
-% 待新增表 tab:q3-ablation(取消注释,数值逐个替换 0.xxxx):
+% 待新增表 tab:q3-ablation(取消注释,数值逐个替换 0.xxxx;数值见 code/src/noted_q3.md 第 2 节):
 % \begin{table}[h]
 % \centering
-% \caption{问题二模型消融实验(验证集,逐项累加:每行在前一行基础上新增一项)}
+% \caption{问题二模型消融实验(逐项累加:每行在前一行基础上新增一项;各配置统一训练 30 epoch,仅用于比较相对增量,与主结果表的 100 epoch 口径不可直接对比)}
 % \label{tab:q3-ablation}
 % \begin{tabular}{lcc}
 % \toprule
@@ -379,7 +379,9 @@ G^c=\mathrm{ReLU}\Bigl(\sum_k \alpha_k^c A^k\Bigr).
 % \end{figure}
 % \begin{figure}[h]
 % \centering
-% \includegraphics[width=0.9\textwidth]{figures/fig_q3_gradcam.png}
-% \caption{Grad-CAM 可视化样例(热区=模型关注区域)}
+% \includegraphics[width=0.32\textwidth]{figures/fig_q3_gradcam_Dent_1014.png}\hfill
+% \includegraphics[width=0.32\textwidth]{figures/fig_q3_gradcam_Hole_1077.png}\hfill
+% \includegraphics[width=0.32\textwidth]{figures/fig_q3_gradcam_Rusty_1.png}
+% \caption{Grad-CAM 可视化样例(左起:凹陷/破洞/锈蚀各一例,热区=模型关注区域)}
 % \label{fig:q3-gradcam}
 % \end{figure}

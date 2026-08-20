@@ -16,7 +16,7 @@
 |---|---|---|
 | `code/src/solve_q1.py` | 问题一:合成负样本集、最优阈值 τ*、分类指标、ROC/F1(τ) 曲线数据 | `04` §问题一"求解结果":τ* 数值、表 `tab:q1-cls`、图 `fig:q1-metrics` |
 | `code/src/solve_q2.py` | 问题二:检测/分割指标、训练损失、PR/混淆/可视化图 | `04` §问题二"求解结果":表 `tab:q2-det`、`tab:q2-seg`,图 `fig:q2-loss/pr/confusion/visual` |
-| `code/src/solve_q3.py` | 问题三:鲁棒性/对比/消融/top4 实验数值与图 | `04` §问题三"求解结果":表 `tab:q3-robust/compare/ablation/top4`,图 `fig:q3-robust/sens/gradcam` |
+| `code/src/solve_q3.py` | 问题三:鲁棒性/对比(双口径)/消融/top4 实验数值与图 | `04` §问题三"求解结果":表 `tab:q3-robust/compare/ablation/top4`,图 `fig:q3-robust/sens/gradcam` |
 | `code/src/solve_predict.py` | 演示提交文件 test_result.csv(413 验证集) | `submission/test_result.csv`(随 make pack 打包) |
 | `code/src/fig_data_dist.py` | fig_data_dist.png(类别分布+单图实例数分布) | `03` 数据概览:图 `fig:data-dist` |
 | `code/src/fig_data_scale.py` | fig_data_scale.png(bbox 尺度分布) | `03` 数据概览:图 `fig:data-scale` |
@@ -55,9 +55,9 @@
 ## 3. solve_q3.py —— 问题三(对应 04 §问题三)
 
 - [ ] 扰动鲁棒性:亮度×0.7、亮度×1.3、对比度调整、高斯噪声、高斯模糊 5 种扰动 → 各扰动下 mAP@0.5、$F_1$ 与衰减率 Δ_j
-- [ ] 对比实验(问题一):检测归约 vs 自建小 CNN vs 传统特征+SVM——复用 solve_q1.py 的合成负样本两半:自建分类器以训练正样本 + 调参半负样本训练,三家统一在评估集(413 正 + 评估半负样本)上对比(训练/调参与评估不重叠,防泄漏)
+- [ ] 对比实验(问题一):检测归约 vs 自建小 CNN vs 传统特征+SVM——复用 solve_q1.py 的合成负样本两半:自建分类器以训练正样本 + 调参半负样本训练,三家统一在评估集(413 正 + 评估半负样本)上对比(训练/调参与评估不重叠,防泄漏)。**双口径**:另用 43 张真实无残损照片(不拼接,详见 `noted.md` 4.3)复评,三家沿用各自阈值,报告合成/真实双口径 $AUC$——结论以 $AUC$ 为准,**不得写成"CNN 最优"**(合成口径高分主要来自拼接伪影)
 - [ ] 对比实验(问题二):YOLOv8n/s/m-seg 三档 → 表 `tab:q3-eff`(参数量、FPS、mAP@0.5);统一硬件(记录 GPU 型号)、batch=1、输入 1280
-- [ ] 消融实验(逐项累加:自基准配置起依次加入):类别加权 / P2 头 / 1280 输入 / 强增强 → mAP@0.5、$AP_s$
+- [ ] 消融实验(逐项累加:自基准配置起依次加入):类别加权 / P2 头 / 1280 输入 / 强增强 → mAP@0.5、$AP_s$。**口径**:各配置 30 epoch,仅比相对增量;表注/正文必须写明"与主结果 100 epoch 不可直接对比"(见 `noted_q3.md` 第 3 节第 5 条警示)
 - [ ] top-4 排序对比(**每图≤4 框评测口径**):按面积(严重度代理) vs 按置信度 → mAP@0.5
 - [ ] 灵敏度:τ_nms 扫描、输入分辨率 640/960/1280 → 出图数据
 - [ ] Grad-CAM:对验证集样例生成激活热力图(3 类各 1-2 张)
@@ -87,6 +87,7 @@
 | `fig_q2_visual.py` | fig_q2_visual.png | 4 张样例:原图+预测框+掩码 | `04` 图 `fig:q2-visual` |
 | `fig_q3_robust.py` | fig_q3_robust.png | 各扰动下 mAP@0.5 柱状图(含基准) | `04` 图 `fig:q3-robust` |
 | `fig_q3_sens.py` | fig_q3_sens.png | 左:τ_nms→mAP;右:分辨率→mAP/FPS(双轴) | `04` 图 `fig:q3-sens` |
+| `fig_q3_ablation.py` | fig_q3_ablation.png | 消融 mAP@0.5 与 $AP_s$ 柱状图 | `04` 表 `tab:q3-ablation`(配图,可选) |
 | `fig_q3_gradcam.py` | fig_q3_gradcam.png | Grad-CAM 热力图样例(原图+热区叠加) | `04` 图 `fig:q3-gradcam` |
 
 **注意**:新建脚本后把脚本名加进 Makefile 的 `FIG_SCRIPTS` 行,并删除示例 `fig_example.py`。
@@ -102,7 +103,7 @@
 | 6.1.1 合成负样本假阳率 | 数值结论(如“假阳率仅 x.xx”) | 表 `tab:q1-cls`(FPR) |
 | 6.1.1 全框口径整体水平 | 一句结论(mAP / Dice 水平) | 表 `tab:q2-det`、`tab:q2-seg` |
 | 6.1.1 训练是否充分、有无过拟合 | 结合曲线的一句结论 | 图 `fig:q2-loss` |
-| 6.1.1 对比实验结论 | 一句结论(检测归约 vs 两基线) | 表 `tab:q3-compare` |
+| 6.1.1 对比实验结论 | 双口径结论(合成 vs 真实负样本;检测归约真实口径最稳,CNN/SVM 合成口径虚高) | 表 `tab:q3-compare`(双口径 $AUC$ 列) |
 | 6.1.2 混淆主要发生在哪两类 | 定性判断(预期深凹痕↔破洞) | 图 `fig:q2-confusion` |
 | 6.1.2 $AP_s$ 与 $AP_l$ 差距 | 结论(小目标更难) | 表 `tab:q2-det` |
 | 6.1.2 阈值选择稳健性 | 平坦 / 变化幅度 | 图 `fig:q1-metrics` |
